@@ -1,0 +1,74 @@
+version: "3.8"
+
+services:
+  cass1:
+    image: cassandra:4.1
+    container_name: cass1
+    hostname: cass1
+    environment:
+      CASSANDRA_CLUSTER_NAME: tp2-cluster
+      CASSANDRA_DC: dc1
+      CASSANDRA_RACK: rack1
+      CASSANDRA_ENDPOINT_SNITCH: GossipingPropertyFileSnitch
+      CASSANDRA_SEEDS: cass1,cass2
+      CASSANDRA_BROADCAST_RPC_ADDRESS: cass1
+      MAX_HEAP_SIZE: 512M
+      HEAP_NEWSIZE: 100M
+    ports:
+      - "9042:9042"   # CQL native transport for cass1
+    volumes:
+      - ./data/cass1:/var/lib/cassandra
+    networks:
+      - cassandra-net
+    restart: unless-stopped
+
+  cass2:
+    image: cassandra:4.1
+    container_name: cass2
+    hostname: cass2
+    depends_on:
+      - cass1
+    environment:
+      CASSANDRA_CLUSTER_NAME: tp2-cluster
+      CASSANDRA_DC: dc1
+      CASSANDRA_RACK: rack2
+      CASSANDRA_ENDPOINT_SNITCH: GossipingPropertyFileSnitch
+      CASSANDRA_SEEDS: cass1,cass2
+      CASSANDRA_BROADCAST_RPC_ADDRESS: cass2
+      MAX_HEAP_SIZE: 512M
+      HEAP_NEWSIZE: 100M
+    ports:
+      - "9043:9042"   # expose cass2 on host 9043
+    volumes:
+      - ./data/cass2:/var/lib/cassandra
+    networks:
+      - cassandra-net
+    restart: unless-stopped
+
+  cass3:
+    image: cassandra:4.1
+    container_name: cass3
+    hostname: cass3
+    depends_on:
+      - cass1
+    environment:
+      CASSANDRA_CLUSTER_NAME: tp2-cluster
+      CASSANDRA_DC: dc1
+      CASSANDRA_RACK: rack3
+      CASSANDRA_ENDPOINT_SNITCH: GossipingPropertyFileSnitch
+      CASSANDRA_SEEDS: cass1,cass2
+      CASSANDRA_BROADCAST_RPC_ADDRESS: cass3
+      MAX_HEAP_SIZE: 512M
+      HEAP_NEWSIZE: 100M
+    ports:
+      - "9044:9042"   # expose cass3 on host 9044
+    volumes:
+      - ./data/cass3:/var/lib/cassandra
+    networks:
+      - cassandra-net
+    restart: unless-stopped
+
+networks:
+  cassandra-net:
+    name: cassandra-net
+    driver: bridge
