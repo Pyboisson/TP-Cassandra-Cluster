@@ -269,3 +269,170 @@ Tu peux mettre quelque chose comme ça dans **“Bonnes pratiques retenues”** 
 - Éviter les requêtes avec `ALLOW FILTERING` en Cassandra. Il est préférable de créer des tables orientées requêtes, comme les tables `heroes_by_*`.
 
 - Documenter les commandes utilisées et les résultats observés pour faciliter la reproduction du cluster et l’analyse des incidents.
+
+# Réponses aux questions
+
+- Question 1
+
+Après le démarrage des trois nœuds :
+•	combien de nœuds sont présents ? 3
+•	quel est leur état ? UN
+•	dans quel datacenter sont-ils placés ? dc1
+•	dans quels racks sont-ils placés ? chacun dans son rack. cass1 dans rack1 par exemple
+
+- Question 2
+
+•	Présentez brièvement l'architecture obtenue.
+Cluster
+ └── dc1
+     └── rack1
+          └── cass1
+     └── rack2
+           └── cass2
+     └── rack3
+          └── cass3
+
+•	Expliquez la différence entre :
+•	Cluster : Ensemble complet du système distribué
+•	Datacenter : Groupe de nodes situé dans une même zone ou un même site
+•	Rack : 	Sous-groupe de nodes dans un datacenter
+•	Node : 	Machine individuelle qui stocke et traite les données
+
+- Question 3
+
+Présentez brièvement votre table métier :
+•	nom du keyspace ; `overwatch`
+•	nom de la table ; `heroes`
+•	principales colonnes ; `hero_key`, `name`, `role`, `subrole`, `location`, `age`, `health`, `shields`, `armor`, `total_hp`
+•	partition key ; `hero_key`
+•	clustering key éventuelle : aucune
+
+- Question 4
+
+Expliquez ce que signifie :
+RF = 3
+pour une partition de votre table métier.
+
+Cela signifie que, dans le datacenter `dc1`, chaque partition de la table métier est copiée sur __3 nœuds différents__.
+
+
+Expliquez notamment la différence entre :
+Partitionnement : Le __partitionnement__ consiste à répartir les données dans le cluster.
+Réplication : La __réplication__ consiste à copier une même partition sur plusieurs nœuds.
+
+
+- Question 5
+
+Expliquez brièvement le chemin suivant pour une donnée de votre table métier :
+
+Partition key : hero_key. La __partition key__ est la valeur qui identifie la partition de la donnée. Exemple : hero_key = 'winston'
+↓
+Hash : Cassandra applique une fonction de __hash__ sur la partition key. Ce hash transforme la clé en une valeur numérique utilisée pour positionner la donnée dans l’anneau Cassandra.
+↓
+Token : Le résultat du hash donne un __token__. Ce token correspond à une position dans l’anneau Cassandra.
+↓
+Nœud(s) responsable(s) : Cassandra regarde dans l’anneau quel nœud possède la plage de tokens correspondant au token calculé. Ce nœud devient le __nœud responsable principal__ de la partition.
+↓
+Réplicas : RF = 3. La partition est stockée sur 3 réplicas
+
+Pour une donnée de la table overwatch.heroes, Cassandra utilise la partition key hero_key. Par exemple, pour hero_key = 'winston', Cassandra applique une fonction de hash sur cette clé afin d’obtenir un token. Ce token correspond à une position dans l’anneau Cassandra. Cassandra détermine ensuite le ou les nœuds responsables de la plage de tokens concernée.
+
+Comme le keyspace overwatch est configuré avec RF = 3 dans le datacenter dc1, la partition n’est pas stockée sur un seul nœud : elle est répliquée sur trois nœuds. Dans ce cluster composé de cass1, cass2 et cass3, la partition est donc présente sur les trois nœuds sous forme de réplicas.
+
+
+- Question 6
+
+Comparez les trois niveaux :
+
+Niveau	Réplicas nécessaires avec RF=3
+ONE	1
+QUORUM	2
+ALL	3
+Expliquez en quelques lignes :
+
+Avec RF = 3, chaque partition est stockée sur trois réplicas.
+
+Le niveau ONE nécessite la réponse d’un seul réplica. Il offre donc une forte disponibilité, mais une cohérence plus faible, car le réplica lu peut ne pas être parfaitement à jour.
+
+Le niveau QUORUM nécessite deux réponses sur trois. Il représente un compromis entre cohérence et disponibilité. Avec RF = 3, il peut continuer à fonctionner si un nœud est en panne.
+
+Le niveau ALL nécessite la réponse des trois réplicas. Il garantit la cohérence la plus forte, mais réduit la disponibilité : si un seul nœud est indisponible, la requête échoue.
+
+
+- Question 7
+
+Que constatez-vous dans l'état du cluster ?
+Après la simulation de panne, on constate que l’état du cluster a changé.
+
+Un des nœuds n’est plus disponible : il apparaît en état __DN__, ce qui signifie __Down/Normal__ (nœud indisponible mais possédant encore sa plage de tokens dans l’anneau). Les deux autres nœuds restent en __UN__ (Up/Normal).
+
+Combien de nœuds sont encore disponibles ? 2
+
+- Question 8
+
+Analysez les résultats :
+
+quelles lectures fonctionnent ? les lectures ONE et QUORUM
+lesquelles échouent éventuellement ? ALL
+pourquoi ?
+quel rôle joue RF = 3 ?
+Votre réponse doit faire le lien entre :
+
+Nombre de réplicas
++
+Nombre de nœuds disponibles
++
+Consistency Level
+
+Avec RF = 3, chaque partition est répliquée sur trois nœuds. Après l’arrêt d’un nœud, il reste deux nœuds disponibles.
+
+Les lectures avec le niveau ONE fonctionnent, car un seul réplica doit répondre. Les lectures avec le niveau QUORUM fonctionnent également, car avec RF = 3 le quorum correspond à deux réplicas, et deux nœuds sont encore disponibles.
+
+En revanche, les lectures avec le niveau ALL échouent, car ALL nécessite la réponse des trois réplicas. Comme un nœud est indisponible, Cassandra ne peut obtenir que deux réponses sur trois.
+
+RF = 3 permet donc de conserver plusieurs copies des données et d’assurer la disponibilité avec ONE et QUORUM malgré la panne d’un nœud. Le résultat dépend directement du nombre de réplicas, du nombre de nœuds encore disponibles et du consistency level choisi.
+
+- Question 9
+
+Que constatez-vous après le redémarrage de cass3 ?
+
+Le nœud revient-il dans le cluster ? oui
+
+Quel est son nouvel état ? UN
+
+Après le redémarrage de cass3, le nœud revient bien dans le cluster. Il apparaît de nouveau dans l’état UN, c’est-à-dire Up/Normal. Le cluster retrouve donc ses trois nœuds disponibles.
+
+
+- Question 10
+
+Expliquez ce que vous observez après le retour de cass3.
+Votre réponse doit expliquer simplement :
+Donnée
+   ↓
+Partition
+   ↓
+Réplication
+   ↓
+Panne d'un nœud
+   ↓
+Données toujours accessibles
+   ↓
+Retour du nœud
+
+Après le retour de cass3, on observe que le nœud rejoint de nouveau le cluster et repasse en état UN. Le cluster retrouve donc ses trois nœuds disponibles.
+
+Une donnée de la table overwatch.heroes est d’abord associée à une partition grâce à sa partition key, par exemple hero_key. Cette partition est ensuite répliquée selon le facteur de réplication RF = 3. Cela signifie qu’elle existe sur trois nœuds.
+
+Lorsqu’un nœud tombe en panne, les données restent accessibles car les autres réplicas possèdent encore une copie de la partition. Avec deux nœuds disponibles, les lectures ONE et QUORUM peuvent continuer à fonctionner.
+
+Quand le nœud cass3 revient, il rejoint le cluster et redevient disponible. Cassandra peut alors retrouver un fonctionnement normal avec trois réplicas disponibles pour chaque partition.
+
+- Question 11
+
+Pourquoi la réplication permet-elle à Cassandra de continuer à fonctionner lorsqu'un nœud tombe en panne ?
+
+La réplication permet à Cassandra de continuer à fonctionner car chaque partition est stockée en plusieurs exemplaires sur différents nœuds. Avec RF = 3, une donnée de la table overwatch.heroes existe sur trois réplicas.
+
+Ainsi, si un nœud tombe en panne, les autres nœuds possèdent encore une copie de la donnée. Cassandra peut donc répondre aux lectures et écritures tant que le nombre de réplicas disponibles est suffisant par rapport au niveau de cohérence choisi.
+
+Par exemple, avec un nœud en panne, il reste deux réplicas disponibles. Les niveaux ONE et QUORUM peuvent encore fonctionner, tandis que ALL échoue car il nécessite les trois réplicas.
